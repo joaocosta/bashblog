@@ -1081,7 +1081,7 @@ create_css() {
         return 0
     fi
     css_include=('main.css' 'blog.css')
-    if [[ ! -f blog.css ]]; then 
+    if [[ ! -f blog.css ]]; then
         # blog.css directives will be loaded after main.css and thus will prevail
         echo '#title{font-size: x-large;}
         a.ablack{color:black !important;}
@@ -1102,7 +1102,7 @@ create_css() {
     # then use it. This directive is here for compatibility with my own
     # home page. Feel free to edit it out, though it doesn't hurt
     if [[ -f ../style.css ]] && [[ ! -f main.css ]]; then
-        ln -s "../style.css" "main.css" 
+        ln -s "../style.css" "main.css"
     elif [[ ! -f main.css ]]; then
         echo 'body{font-family:Georgia,"Times New Roman",Times,serif;margin:0;padding:0;background-color:#F3F3F3;}
         #divbodyholder{padding:5px;background-color:#DDD;width:100%;max-width:874px;margin:24px auto;}
