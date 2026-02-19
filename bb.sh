@@ -54,8 +54,6 @@ global_variables() {
     # Set this to false for a Twitter button with share count. The cookieless version
     # is just a link.
     global_twitter_cookieless="true"
-    # Default search page, where tweets more than a week old are hidden
-    global_twitter_search="twitter"
 
     # Change this to your disqus username to use disqus for comments
     global_disqus_username=""
@@ -178,10 +176,10 @@ global_variables_check() {
 # Test if the markdown script is working correctly
 test_markdown() {
     [[ -n $markdown_bin ]] &&
-        (
+        {
         [[ $("$markdown_bin" <<< $'line 1\n\nline 2') == $'<p>line 1</p>\n\n<p>line 2</p>' ]] ||
         [[ $("$markdown_bin" <<< $'line 1\n\nline 2') == $'<p>line 1</p>\n<p>line 2</p>' ]]
-        )
+        }
 }
 
 
@@ -285,7 +283,7 @@ get_html_file_content() {
 #	"full" to edit full HTML, and not only text part (keeps old filename)
 #	leave empty for default behavior (edit only text part and change name)
 edit() {
-    [[ ! -f "${1%%.*}.html" ]] && echo "Can't edit post "${1%%.*}.html", did you mean to use \"bb.sh post <draft_file>\"?" && exit -1
+    [[ ! -f "${1%%.*}.html" ]] && echo "Can't edit post \"${1%%.*}.html\", did you mean to use \"bb.sh post <draft_file>\"?" && exit 255
     # Original post timestamp
     edit_timestamp=$(LC_ALL=C date -r "${1%%.*}.html" +"$date_format_full" )
     touch_timestamp=$(LC_ALL=C date -r "${1%%.*}.html" +"$date_format_timestamp")
@@ -295,8 +293,7 @@ edit() {
         filename=$1
     else
         if [[ ${1##*.} == md ]]; then
-            test_markdown
-            if (($? != 0)); then
+            if ! test_markdown; then
                 echo "Markdown is not working, please edit HTML file directly."
                 exit
             fi
@@ -330,6 +327,12 @@ edit() {
     tags_after=$(tags_in_post "$filename")
     relevant_tags=$(echo "$tags_before $tags_after" | tr ',' ' ' | tr ' ' '\n' | sort -u | tr '\n' ' ')
     if [[ ! -z $relevant_tags ]]; then
+        # The variable $relevant_tags contains a space-separated list of tags (e.g., "tag1 tag2 tag3").
+        # The posts_with_tags function expects each of these tags as a separate argument to find their corresponding
+        # tag pages.
+        # Because ShellCheck defaults to recommending quotes for safety, I used # shellcheck disable=SC2086 to
+        # explicitly tell ShellCheck that we are intentionally using word splitting here.
+        # shellcheck disable=SC2086
         relevant_posts="$(posts_with_tags $relevant_tags) $filename"
         rebuild_tags "$relevant_posts" "$relevant_tags"
     fi
@@ -577,8 +580,7 @@ write_entry() {
         [[ $2 == -html ]] && fmt=html
         # Test if Markdown is working before re-posting a .md file
         if [[ $extension == md ]]; then
-            test_markdown
-            if (($? != 0)); then
+            if ! test_markdown; then
                 echo "Markdown is not working, please edit HTML file directly."
                 exit
             fi
@@ -625,7 +627,7 @@ EOF
             mkdir -p "drafts/"
             chmod 700 "drafts/"
 
-            title=$(head -n 1 $TMPFILE)
+            title=$(head -n 1 "$TMPFILE")
             [[ -n $convert_filename ]] && title=$(echo "$title" | eval "$convert_filename")
             [[ -n $title ]] || title=$RANDOM
 
@@ -646,8 +648,9 @@ EOF
     fi
     chmod 644 "$filename"
     echo "Posted $filename"
-    relevant_tags=$(tags_in_post $filename)
+    relevant_tags=$(tags_in_post "$filename")
     if [[ -n $relevant_tags ]]; then
+        # shellcheck disable=SC2086
         relevant_posts="$(posts_with_tags $relevant_tags) $filename"
         rebuild_tags "$relevant_posts" "$relevant_tags"
     fi
@@ -704,7 +707,7 @@ all_tags() {
     {
         echo "<h3>$template_tags_title</h3>"
         echo "<ul>"
-        for i in $prefix_tags*.html; do
+        for i in "$prefix_tags"*.html; do
             [[ -f "$i" ]] || break
             echo -n "." 1>&3
             nposts=$(grep -c "<\!-- text begin -->" "$i")
@@ -799,7 +802,9 @@ rebuild_tags() {
         all_tags=yes
     else
         # will process only given files and tags
+        # shellcheck disable=SC2086
         files=$(printf '%s\n' $1 | sort -u)
+        # shellcheck disable=SC2086
         files=$(ls -t $files)
         tags=$2
     fi
@@ -861,11 +866,12 @@ get_post_author() {
 list_tags() {
     if [[ $2 == -n ]]; then do_sort=1; else do_sort=0; fi
 
-    ls ./$prefix_tags*.html &> /dev/null
-    (($? != 0)) && echo "No posts yet. Use 'bb.sh post' to create one" && return
+    if ! ls ./"$prefix_tags"*.html &> /dev/null; then
+        echo "No posts yet. Use 'bb.sh post' to create one" && return
+    fi
 
     lines=""
-    for i in $prefix_tags*.html; do
+    for i in "$prefix_tags"*.html; do
         [[ -f "$i" ]] || break
         nposts=$(grep -c "<\!-- text begin -->" "$i")
         tagname=${i#"$prefix_tags"}
@@ -884,8 +890,9 @@ list_tags() {
 
 # Displays a list of the posts
 list_posts() {
-    ls ./*.html &> /dev/null
-    (($? != 0)) && echo "No posts yet. Use 'bb.sh post' to create one" && return
+    if ! ls ./*.html &> /dev/null; then
+        echo "No posts yet. Use 'bb.sh post' to create one" && return
+    fi
 
     lines=""
     n=1
@@ -1097,8 +1104,7 @@ reset() {
 
 # Detects if GNU date is installed
 date_version_detect() {
-	date --version >/dev/null 2>&1
-	if (($? != 0));  then
+	if ! date --version >/dev/null 2>&1; then
 		# date utility is BSD. Test if gdate is installed 
 		if gdate --version >/dev/null 2>&1 ; then
             date() {
@@ -1133,7 +1139,8 @@ do_main() {
     date_version_detect
     # Load default configuration, then override settings with the config file
     global_variables
-    [[ -f $global_config ]] && source "$global_config" &> /dev/null 
+    # shellcheck disable=SC1090
+    [[ -f "$global_config" ]] && source "$global_config" &> /dev/null
     global_variables_check
 
     # Check for $EDITOR
