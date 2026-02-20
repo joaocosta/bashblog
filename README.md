@@ -7,6 +7,16 @@ I created it because I wanted a very, very simple way to post entries to a blog 
 
 *How simple? Just type `./bb.sh post` and start writing your blogpost.*
 
+### Development Setup
+
+If you plan to contribute to BashBlog, please run the setup script to configure the Git hooks and submodules:
+
+```bash
+./setup.sh
+```
+
+This will ensure that ShellCheck runs automatically before your commits.
+
 [![asciinema](https://asciinema.org/a/4nr44km9ipow4s7u2w2eabeik.png)](https://asciinema.org/a/4nr44km9ipow4s7u2w2eabeik)
 
 You can see a sample here: [read the initial blog post](https://web.archive.org/web/20130520204024/http://mmb.pcb.ub.es/~carlesfe/blog/creating-a-simple-blog-system-with-a-500-line-bash-script.html). That page was 100% generated using bashblog, no additional tweaking.

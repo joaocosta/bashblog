@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+# Pre-commit hook to run shellcheck against bb.sh
+set -euo pipefail
+
+if [[ -f bb.sh ]]; then
+    printf "Running shellcheck against bb.sh...\n"
+    if ! shellcheck bb.sh; then
+        printf "\nShellCheck failed! Please fix the issues before committing.\n"
+        exit 1
+    fi
+fi
+
+exit 0
