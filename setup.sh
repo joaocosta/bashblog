@@ -3,6 +3,12 @@
 # Setup script for BashBlog development
 set -euo pipefail
 
+printf "Checking dependencies...\n"
+if ! command -v shellcheck &> /dev/null; then
+    printf "Error: 'shellcheck' is not installed. Please install it before setting up the development environment.\n"
+    exit 1
+fi
+
 printf "Setting up Git hooks...\n"
 git config core.hooksPath hooks
 
