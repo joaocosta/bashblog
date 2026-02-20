@@ -1377,6 +1377,25 @@ reset() {
 }
 
 #######################################
+# Check that all required runtime dependencies are available.
+#######################################
+check_dependencies() {
+    local deps=(awk sed grep date tar iconv column mktemp tr)
+    local missing_deps=()
+    local dep
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &> /dev/null; then
+            missing_deps+=("$dep")
+        fi
+    done
+
+    if [[ ${#missing_deps[@]} -gt 0 ]]; then
+        printf "Error: The following required dependencies are missing: %s\n" "${missing_deps[*]}"
+        exit 1
+    fi
+}
+
+#######################################
 # Detects if GNU date is installed and sets aliases if needed.
 # Arguments:
 #   None
@@ -1408,6 +1427,7 @@ date_version_detect() {
 #   $@: Command line arguments.
 #######################################
 do_main() {
+    check_dependencies
     date_version_detect
     global_variables
     if [[ -f "$GLOBAL_CONFIG" ]]; then
