@@ -553,6 +553,9 @@ is_boilerplate_file() {
 #   $5: original blog timestamp
 #   $6: post author
 #######################################
+# In this specific case, the script is only using the variable value (the string containing the filename) for a
+# comparison. It never actually opens the file for reading (e.g., via cat, grep, or redirection) inside that block.
+# shellcheck disable=SC2094
 create_html_page() {
     local content="$1"
     local filename="$2"
