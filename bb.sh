@@ -8,12 +8,17 @@ set -euo pipefail
 
 # Global variables
 TMP_FILES=()
+
+#######################################
+# Clean up temporary files on exit.
+# Arguments:
+#   None
+#######################################
 cleanup() {
-    # Silence errors if TMP_FILES is unset or empty
     local f
     if [[ ${#TMP_FILES[@]} -gt 0 ]]; then
         for f in "${TMP_FILES[@]}"; do
-            if [[ -n ${f:-} && -f ${f:-} ]]; then
+            if [[ -n "${f:-}" && -f "${f:-}" ]]; then
                 rm -f "$f"
             fi
         done
@@ -22,26 +27,35 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Create a temporary file and register it for cleanup
+#######################################
+# Create a temporary file and register it for cleanup.
+# Arguments:
+#   Optional suffix for the filename.
+# Outputs:
+#   The path to the created temporary file.
+#######################################
 mktmp() {
+    local suffix="${1:-}"
     local tmp
-    if [[ $# -eq 1 ]]; then
-        tmp=$(mktemp ".bb.tmp.XXXXXX.$1")
+    if [[ -n "$suffix" ]]; then
+        tmp=$(mktemp ".bb.tmp.XXXXXX.$suffix")
     else
         tmp=$(mktemp ".bb.tmp.XXXXXX")
     fi
     TMP_FILES+=("$tmp")
-    echo "$tmp"
+    printf '%s\n' "$tmp"
 }
-# It is recommended to perform a 'rebuild' after changing any of this in the code
 
 # Config file. Any settings "key=value" written there will override the
 # global_variables defaults. Useful to avoid editing bb.sh and having to deal
 # with merges in VCS
-global_config=".config"
+GLOBAL_CONFIG=".config"
 
-# This function will load all the variables defined here. They might be overridden
-# by the 'global_config' file contents
+#######################################
+# Load default configuration variables.
+# Arguments:
+#   None
+#######################################
 global_variables() {
     global_software_name="BashBlog"
     global_software_version="2.10"
@@ -84,7 +98,6 @@ global_variables() {
 
     # Change this to your disqus username to use disqus for comments
     global_disqus_username=""
-
 
     # Blog generated files
     # index page of blog (it is usually good to use "index.html" here)
@@ -188,74 +201,97 @@ global_variables() {
     [[ -f Markdown.pl ]] && markdown_bin=./Markdown.pl || markdown_bin=$(which Markdown.pl 2>/dev/null || which markdown 2>/dev/null)
 }
 
-# Check for the validity of some variables
-# DO NOT EDIT THIS FUNCTION unless you know what you're doing
+#######################################
+# Check for the validity of some variables.
+# Arguments:
+#   None
+#######################################
 global_variables_check() {
-    if [[ ${header_file:-} == .header.html ]]; then
-        echo "Please check your configuration. '.header.html' is not a valid value for the setting 'header_file'"
+    if [[ "${header_file:-}" == ".header.html" ]]; then
+        printf 'Please check your configuration. '"'.header.html' is not a valid value for the setting 'header_file'\n"
         exit 1
     fi
-    if [[ ${footer_file:-} == .footer.html ]]; then
-        echo "Please check your configuration. '.footer.html' is not a valid value for the setting 'footer_file'"
+    if [[ "${footer_file:-}" == ".footer.html" ]]; then
+        printf 'Please check your configuration. '"'.footer.html' is not a valid value for the setting 'footer_file'\n"
         exit 1
     fi
 }
 
-
-# Test if the markdown script is working correctly
+#######################################
+# Test if the markdown script is working correctly.
+# Arguments:
+#   None
+# Returns:
+#   0 if working, non-zero otherwise.
+#######################################
 test_markdown() {
-    [[ -n $markdown_bin ]] &&
-        {
-        [[ $("$markdown_bin" <<< $'line 1\n\nline 2') == $'<p>line 1</p>\n\n<p>line 2</p>' ]] ||
-        [[ $("$markdown_bin" <<< $'line 1\n\nline 2') == $'<p>line 1</p>\n<p>line 2</p>' ]]
-        }
+    [[ -n "${markdown_bin:-}" ]] && {
+        [[ "$("$markdown_bin" <<< $'line 1\n\nline 2')" == $'<p>line 1</p>\n\n<p>line 2</p>' ]] ||
+        [[ "$("$markdown_bin" <<< $'line 1\n\nline 2')" == $'<p>line 1</p>\n<p>line 2</p>' ]]
+    }
 }
 
-
-# Parse a Markdown file into HTML and return the generated file
+#######################################
+# Parse a Markdown file into HTML and return the generated file.
+# Arguments:
+#   $1: Path to the Markdown file.
+# Outputs:
+#   Path to the generated HTML file.
+#######################################
 markdown() {
+    local input_file="$1"
     local out
     out=$(mktmp "html")
-    $markdown_bin "$1" > "$out"
-    echo "$out"
+    "$markdown_bin" "$input_file" > "$out"
+    printf '%s\n' "$out"
 }
 
-
-# Prints the required google analytics code
+#######################################
+# Prints the required google analytics code.
+# Arguments:
+#   None
+#######################################
 google_analytics() {
-    if [[ -z ${global_analytics:-} && -z ${global_analytics_file:-} ]]; then
+    if [[ -z "${global_analytics:-}" && -z "${global_analytics_file:-}" ]]; then
         return 0
     fi
 
-    if [[ -z ${global_analytics_file:-} ]]; then
-        echo "<script type=\"text/javascript\">
+    if [[ -z "${global_analytics_file:-}" ]]; then
+        cat <<EOF
+<script type="text/javascript">
 
-        var _gaq = _gaq || [];
-        _gaq.push(['_setAccount', '${global_analytics}']);
-        _gaq.push(['_trackPageview']);
+var _gaq = _gaq || [];
+_gaq.push(['_setAccount', '${global_analytics}']);
+_gaq.push(['_trackPageview']);
 
-        (function() {
-        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
-        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
-        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
-        })();
+(function() {
+var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+})();
 
-        </script>"
+</script>
+EOF
     else
         cat "$global_analytics_file"
     fi
 }
 
-# Prints the required code for disqus comments
+#######################################
+# Prints the required code for disqus comments.
+# Arguments:
+#   None
+#######################################
 disqus_body() {
-    if [[ -z ${global_disqus_username:-} ]]; then
+    if [[ -z "${global_disqus_username:-}" ]]; then
         return 0
     fi
 
-    echo '<div id="disqus_thread"></div>
+    cat <<EOF
+<div id="disqus_thread"></div>
             <script type="text/javascript">
             /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
-               var disqus_shortname = '"'$global_disqus_username'"'; // required: replace example with your forum shortname
+               var disqus_shortname = '${global_disqus_username}'; // required: replace example with your forum shortname
 
             /* * * DONT EDIT BELOW THIS LINE * * */
             (function() {
@@ -265,17 +301,23 @@ disqus_body() {
             })();
             </script>
             <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
-            <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>'
+            <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+EOF
 }
 
-# Prints the required code for disqus in the footer
+#######################################
+# Prints the required code for disqus in the footer.
+# Arguments:
+#   None
+#######################################
 disqus_footer() {
-    if [[ -z ${global_disqus_username:-} ]]; then
+    if [[ -z "${global_disqus_username:-}" ]]; then
         return 0
     fi
-    echo '<script type="text/javascript">
+    cat <<EOF
+<script type="text/javascript">
         /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
-        var disqus_shortname = '"'$global_disqus_username'"'; // required: replace example with your forum shortname
+        var disqus_shortname = '${global_disqus_username}'; // required: replace example with your forum shortname
 
         /* * * DONT EDIT BELOW THIS LINE * * */
         (function () {
@@ -284,20 +326,25 @@ disqus_footer() {
         s.src = "//" + disqus_shortname + ".disqus.com/count.js";
         (document.getElementsByTagName("HEAD")[0] || document.getElementsByTagName("BODY")[0]).appendChild(s);
     }());
-    </script>'
+    </script>
+EOF
 }
 
-# Reads HTML file from stdin, prints its content to stdout
-# $1    where to start ("text" or "entry")
-# $2    where to stop ("text" or "entry")
-# $3    "cut" to remove text from <hr /> to <!-- text end -->
-#       note that this does not remove <hr /> line itself,
-#       so you can see if text was cut or not
+#######################################
+# Reads HTML file from stdin, prints its content to stdout.
+# Arguments:
+#   $1: where to start ("text" or "entry")
+#   $2: where to stop ("text" or "entry")
+#   $3: "cut" to remove text from <hr /> to <!-- text end -->
+#######################################
 get_html_file_content() {
-    awk "/<!-- $1 begin -->/, /<!-- $2 end -->/{
-        if (!/<!-- $1 begin -->/ && !/<!-- $2 end -->/) print
-        if (\"${3:-}\" == \"cut\" && /$cut_line/){
-            if (\"$2\" == \"text\") exit # no need to read further
+    local start="$1"
+    local stop="$2"
+    local cut="${3:-}"
+    awk "/<!-- $start begin -->/, /<!-- $stop end -->/{
+        if (!/<!-- $start begin -->/ && !/<!-- $stop end -->/) print
+        if (\"$cut\" == \"cut\" && /$cut_line/){
+            if (\"$stop\" == \"text\") exit # no need to read further
             while (getline > 0 && !/<!-- text end -->/) {
                 if (\"$cut_tags\" == \"no\" && /^<p>$template_tags_line_header/ ) print
             }
@@ -305,154 +352,174 @@ get_html_file_content() {
     }"
 }
 
-# Edit an existing, published .html file while keeping its original timestamp
-# Please note that this function does not automatically republish anything, as
-# it is usually called from 'main'.
-#
-# Note that it edits HTML file, even if you wrote the post as markdown originally
-# Note that if you edit title then filename might also change
-#
-# $1 	the file to edit
-# $2	(optional) edit mode:
-#	"keep" to keep old filename
-#	"full" to edit full HTML, and not only text part (keeps old filename)
-#	leave empty for default behavior (edit only text part and change name)
+#######################################
+# Edit an existing, published .html file while keeping its original timestamp.
+# Arguments:
+#   $1: The file to edit.
+#   $2: (optional) Edit mode ("keep" or "full").
+#######################################
 edit() {
-    if [[ ! -f "${1%%.*}.html" ]]; then
-        echo "Can't edit post \"${1%%.*}.html\", did you mean to use \"bb.sh post <draft_file>\"?"
+    local file_to_edit="$1"
+    local mode="${2:-}"
+
+    if [[ ! -f "${file_to_edit%%.*}.html" ]]; then
+        printf 'Can'"'t edit post \"%s\", did you mean to use \"bb.sh post <draft_file>\"?\n" "${file_to_edit%%.*}.html"
         exit 1
     fi
+
     # Original post timestamp
-    edit_timestamp=$(LC_ALL=C date -r "${1%%.*}.html" +"$date_format_full" )
-    touch_timestamp=$(LC_ALL=C date -r "${1%%.*}.html" +"$date_format_timestamp")
-    tags_before=$(tags_in_post "${1%%.*}.html")
-    if [[ ${2:-} == full ]]; then
-        $EDITOR "$1"
-        filename=$1
+    local edit_timestamp
+    local touch_timestamp
+    edit_timestamp=$(LC_ALL=C date -r "${file_to_edit%%.*}.html" +"$date_format_full" )
+    touch_timestamp=$(LC_ALL=C date -r "${file_to_edit%%.*}.html" +"$date_format_timestamp")
+
+    local tags_before
+    tags_before=$(tags_in_post "${file_to_edit%%.*}.html")
+
+    local filename
+    local TMPFILE
+    if [[ "$mode" == "full" ]]; then
+        "$EDITOR" "$file_to_edit"
+        filename="$file_to_edit"
     else
-        if [[ ${1##*.} == md ]]; then
+        if [[ "${file_to_edit##*.}" == "md" ]]; then
             if ! test_markdown; then
-                echo "Markdown is not working, please edit HTML file directly."
+                printf "Markdown is not working, please edit HTML file directly.\n"
                 exit 1
             fi
             # editing markdown file
-            $EDITOR "$1"
-            TMPFILE=$(markdown "$1")
-            filename=${1%%.*}.html
+            "$EDITOR" "$file_to_edit"
+            TMPFILE=$(markdown "$file_to_edit")
+            filename="${file_to_edit%%.*}.html"
         else
             # Create the content file
             TMPFILE=$(mktmp "html")
             # Title
-            get_post_title "$1" > "$TMPFILE"
+            get_post_title "$file_to_edit" > "$TMPFILE"
             # Post text with plaintext tags
-            get_html_file_content 'text' 'text' <"$1" | sed "/^<p>$template_tags_line_header/s|<a href='$prefix_tags\([^']*\).html'>\\1</a>|\\1|g" >> "$TMPFILE"
-            $EDITOR "$TMPFILE"
-            filename=$1
+            get_html_file_content 'text' 'text' <"$file_to_edit" | sed "/^<p>$template_tags_line_header/s|<a href='$prefix_tags\([^']*\).html'>\\1</a>|\\1|g" >> "$TMPFILE"
+            "$EDITOR" "$TMPFILE"
+            filename="$file_to_edit"
         fi
-        rm "$filename"
-        if [[ ${2:-} == keep ]]; then
-            parse_file "$TMPFILE" "$edit_timestamp" "$filename"
+        rm -f "$filename"
+        if [[ "$mode" == "keep" ]]; then
+            filename=$(parse_file "$TMPFILE" "$edit_timestamp" "$filename")
         else
-            parse_file "$TMPFILE" "$edit_timestamp" # this command sets $filename as the html processed file
-            if [[ ${1##*.} == md ]]; then
-                mv "$1" "${filename%%.*}.md" 2>/dev/null || true
+            filename=$(parse_file "$TMPFILE" "$edit_timestamp") # this command sets $filename as the html processed file
+            if [[ "${file_to_edit##*.}" == "md" ]]; then
+                mv "$file_to_edit" "${filename%%.*}.md" 2>/dev/null || true
             fi
         fi
-        rm "$TMPFILE"
+        rm -f "${TMPFILE:-}"
     fi
     touch -t "$touch_timestamp" "$filename"
-    touch -t "$touch_timestamp" "$1"
+    touch -t "$touch_timestamp" "$file_to_edit"
     chmod 644 "$filename"
-    echo "Posted $filename"
+    printf "Posted %s\n" "$filename"
+
+    local tags_after
+    local relevant_tags
     tags_after=$(tags_in_post "$filename")
-    relevant_tags=$(echo "$tags_before $tags_after" | tr ',' ' ' | tr ' ' '\n' | sort -u | tr '\n' ' ')
-    if [[ -n ${relevant_tags:-} ]]; then
-        # The variable $relevant_tags contains a space-separated list of tags (e.g., "tag1 tag2 tag3").
-        # The posts_with_tags function expects each of these tags as a separate argument to find their corresponding
-        # tag pages.
-        # Because ShellCheck defaults to recommending quotes for safety, I used # shellcheck disable=SC2086 to
-        # explicitly tell ShellCheck that we are intentionally using word splitting here.
+    relevant_tags=$(printf '%s %s' "$tags_before" "$tags_after" | tr ',' ' ' | tr ' ' '\n' | sort -u | tr '\n' ' ')
+    if [[ -n "${relevant_tags:-}" ]]; then
+        local relevant_posts
         # shellcheck disable=SC2086
         relevant_posts="$(posts_with_tags $relevant_tags) $filename"
         rebuild_tags "$relevant_posts" "$relevant_tags"
     fi
 }
 
-# Create a Twitter summary (twitter "card") for the post
-#
-# $1 the post file
-# $2 the title
+#######################################
+# Create a Twitter summary (twitter "card") for the post.
+# Arguments:
+#   $1: The post file.
+#   $2: The title.
+#######################################
 twitter_card() {
-    if [[ -z ${global_twitter_username:-} ]]; then
+    local post_file="$1"
+    local title="$2"
+
+    if [[ -z "${global_twitter_username:-}" ]]; then
         return 0
     fi
 
-    echo "<meta name='twitter:card' content='summary' />"
-    echo "<meta name='twitter:site' content='@$global_twitter_username' />"
-    echo "<meta name='twitter:title' content='$2' />" # Twitter truncates at 70 char
-    description=$(grep -v "^<p>$template_tags_line_header" "$1" | sed -e 's/<[^>]*>//g' | tr '\n' ' ' | sed "s/\"/'/g" | head -c 250)
-    echo "<meta name='twitter:description' content=\"$description\" />"
+    printf "<meta name='twitter:card' content='summary' />\n"
+    printf "<meta name='twitter:site' content='@%s' />\n" "$global_twitter_username"
+    printf "<meta name='twitter:title' content='%s' />\n" "$title" # Twitter truncates at 70 char
+
+    local description
+    description=$(grep -v "^<p>$template_tags_line_header" "$post_file" | sed -e 's/<[^>]*>//g' | tr '\n' ' ' | sed "s/\"/'/g" | head -c 250)
+    printf "<meta name='twitter:description' content=\"%s\" />\n" "$description"
 
     # For the image we try to locate the first image in the article
-    image=$(sed -n '2,$ d; s/.*<img.*src="\([^"]*\)".*/\1/p' "$1")
+    local image
+    image=$(sed -n '2,$ d; s/.*<img.*src="\([^"]*\)".*/\1/p' "$post_file")
 
     # If none, then we try a global setting image
-    if [[ -z ${image:-} && -n ${global_twitter_card_image:-} ]]; then
-        image=$global_twitter_card_image
+    if [[ -z "${image:-}" && -n "${global_twitter_card_image:-}" ]]; then
+        image="$global_twitter_card_image"
     fi
 
     # If none, return
-    if [[ -z ${image:-} ]]; then
+    if [[ -z "${image:-}" ]]; then
         return 0
     fi
 
     # Final housekeeping
-    if [[ ! $image =~ ^https?:// ]]; then
-        image=$global_url/$image # Check that URL is absolute
+    if [[ ! "$image" =~ ^https?:// ]]; then
+        image="$global_url/$image" # Check that URL is absolute
     fi
-    echo "<meta name='twitter:image' content='$image' />"
+    printf "<meta name='twitter:image' content='%s' />\n" "$image"
 }
 
-# Adds the code needed by the twitter button
-#
-# $1 the post URL
+#######################################
+# Adds the code needed by the twitter button.
+# Arguments:
+#   $1: The post URL.
+#######################################
 twitter() {
-    if [[ -z ${global_twitter_username:-} ]]; then
+    local post_url="$1"
+
+    if [[ -z "${global_twitter_username:-}" ]]; then
         return 0
     fi
 
-    if [[ -z ${global_disqus_username:-} ]]; then
-        if [[ $global_twitter_cookieless == true ]]; then
-            id=$RANDOM
+    if [[ -z "${global_disqus_username:-}" ]]; then
+        if [[ "${global_twitter_cookieless:-}" == "true" ]]; then
+            local id=$RANDOM
+            local search_engine="https://twitter.com/search?q="
 
-            search_engine="https://twitter.com/search?q="
-
-            echo "<p id='twitter'><a href='http://twitter.com/intent/tweet?url=$1&text=$template_twitter_comment&via=$global_twitter_username'>$template_comments $template_twitter_button</a> "
-            echo "<a href='$search_engine""$1'><span id='count-$id'></span></a>&nbsp;</p>"
-            return;
+            printf "<p id='twitter'><a href='http://twitter.com/intent/tweet?url=%s&text=%s&via=%s'>%s %s</a> " \
+                "$post_url" "$template_twitter_comment" "$global_twitter_username" "$template_comments" "$template_twitter_button"
+            printf "<a href='%s%s'><span id='count-%s'></span></a>&nbsp;</p>\n" "$search_engine" "$post_url" "$id"
+            return 0
         else
-            echo "<p id='twitter'>$template_comments&nbsp;";
+            printf "<p id='twitter'>%s&nbsp;" "$template_comments"
         fi
     else
-        echo "<p id='twitter'><a href=\"$1#disqus_thread\">$template_comments</a> &nbsp;"
+        printf "<p id='twitter'><a href=\"%s#disqus_thread\">%s</a> &nbsp;" "$post_url" "$template_comments"
     fi
 
-    echo "<a href=\"https://twitter.com/share\" class=\"twitter-share-button\" data-text=\"$template_twitter_comment\" data-url=\"$1\""
-    echo " data-via=\"$global_twitter_username\""
-    echo ">$template_twitter_button</a>	<script>!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src=\"//platform.twitter.com/widgets.js\";fjs.parentNode.insertBefore(js,fjs);}}(document,\"script\",\"twitter-wjs\");</script>"
-    echo "</p>"
+    printf "<a href=\"https://twitter.com/share\" class=\"twitter-share-button\" data-text=\"%s\" data-url=\"%s\"" \
+        "$template_twitter_comment" "$post_url"
+    printf " data-via=\"%s\"" "$global_twitter_username"
+    printf ">%s</a>	<script>!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src=\"//platform.twitter.com/widgets.js\";fjs.parentNode.insertBefore(js,fjs);}}(document,\"script\",\"twitter-wjs\");</script>" \
+        "$template_twitter_button"
+    printf "</p>\n"
 }
 
-# Check if the file is a 'boilerplate' (i.e. not a post)
-# The return values are designed to be used like this inside a loop:
-# is_boilerplate_file <file> && continue
-#
-# $1 the file
-#
-# Return 0 (bash return value 'true') if the input file is an index, feed, etc
-# or 1 (bash return value 'false') if it is a blogpost
+#######################################
+# Check if the file is a 'boilerplate' (i.e. not a post).
+# Arguments:
+#   $1: The file.
+# Returns:
+#   0 if boilerplate, 1 otherwise.
+#######################################
 is_boilerplate_file() {
-    name=${1#./}
+    local file_path="$1"
+    local name="${file_path#./}"
+    local item
+
     # First check against user-defined non-blogpost pages
     for item in "${non_blogpost_files[@]:-}"; do
         if [[ "$name" == "$item" ]]; then
@@ -460,401 +527,454 @@ is_boilerplate_file() {
         fi
     done
 
-    case $name in
-    ( "$index_file" | "$archive_index" | "$tags_index" | "$footer_file" | "$header_file" | "$global_analytics_file" | "$prefix_tags"* )
-        return 0 ;;
-    ( * ) # Check for excluded
-        for excl in "${html_exclude[@]:-}"; do
-            if [[ $name == "$excl" ]]; then
-                return 0
-            fi
-        done
-        return 1 ;;
+    case "$name" in
+        "$index_file" | "$archive_index" | "$tags_index" | "${footer_file:-}" | "${header_file:-}" | "${global_analytics_file:-}" | "$prefix_tags"*)
+            return 0
+            ;;
+        *) # Check for excluded
+            local excl
+            for excl in "${html_exclude[@]:-}"; do
+                if [[ "$name" == "$excl" ]]; then
+                    return 0
+                fi
+            done
+            return 1
+            ;;
     esac
 }
 
-# Adds all the bells and whistles to format the html page
-# Every blog post is marked with a <!-- entry begin --> and <!-- entry end -->
-# which is parsed afterwards in the other functions. There is also a marker
-# <!-- text begin --> to determine just the beginning of the text body of the post
-#
-# $1     a file with the body of the content
-# $2     the output file
-# $3     "yes" if we want to generate the index.html,
-#        "no" to insert new blog posts
-# $4     title for the html header
-# $5     original blog timestamp
-# $6     post author
+#######################################
+# Adds all the bells and whistles to format the html page.
+# Arguments:
+#   $1: a file with the body of the content
+#   $2: the output file
+#   $3: "yes" if generating index.html, "no" otherwise
+#   $4: title for the html header
+#   $5: original blog timestamp
+#   $6: post author
+#######################################
 create_html_page() {
-    content=$1
-    filename=$2
-    index=$3
-    title=$4
-    timestamp=${5:-}
-    author=${6:-}
+    local content="$1"
+    local filename="$2"
+    local index="$3"
+    local title="$4"
+    local timestamp="${5:-}"
+    local author="${6:-}"
 
     # Create the actual blog post
-    # html, head
     {
         cat ".header.html"
-        echo "<title>$title</title>"
+        printf "<title>%s</title>\n" "$title"
         google_analytics
         twitter_card "$content" "$title"
-        echo "</head><body>"
+        printf "</head><body>\n"
+
         # stuff to add before the actual body content
-        if [[ -n ${body_begin_file:-} ]]; then
+        if [[ -n "${body_begin_file:-}" ]]; then
             cat "$body_begin_file"
         fi
-        if [[ $filename = $index_file* && -n ${body_begin_file_index:-} ]]; then
+        if [[ "$filename" == "$index_file"* && -n "${body_begin_file_index:-}" ]]; then
             cat "$body_begin_file_index"
         fi
+
         # body divs
-        echo '<div id="divbodyholder">'
-        echo '<div class="headerholder"><div class="header">'
-        # blog title
-        echo '<div id="title">'
+        cat <<EOF
+<div id="divbodyholder">
+<div class="headerholder"><div class="header">
+<div id="title">
+EOF
         cat .title.html
-        echo '</div></div></div>' # title, header, headerholder
-        echo '<div id="divbody"><div class="content">'
+        printf '</div></div></div>\n'
+        printf '<div id="divbody"><div class="content">\n'
 
-        file_url=${filename#./}
-        file_url=${file_url%.rebuilt} # Get the correct URL when rebuilding
-        # one blog entry
-        if [[ $index == no ]]; then
-            echo '<!-- entry begin -->' # marks the beginning of the whole post
-            echo "<h3><a class=\"ablack\" href=\"$file_url\">"
+        local file_url="${filename#./}"
+        file_url="${file_url%.rebuilt}" # Get the correct URL when rebuilding
+
+        if [[ "$index" == "no" ]]; then
+            printf '<!-- entry begin -->\n'
+            printf "<h3><a class=\"ablack\" href=\"%s\">\n" "$file_url"
             # remove possible <p>'s on the title because of markdown conversion
-            title=${title//<p>/}
-            title=${title//<\/p>/}
-            echo "$title"
-            echo '</a></h3>'
-            if [[ -z ${timestamp:-} ]]; then
-                echo "<!-- $date_inpost: #$(LC_ALL=$date_locale date +"$date_format_timestamp")# -->"
-            else
-                echo "<!-- $date_inpost: #$(LC_ALL=$date_locale date +"$date_format_timestamp" --date="$timestamp")# -->"
-            fi
-            if [[ -z ${timestamp:-} ]]; then
-                echo -n "<div class=\"subtitle\">$(LC_ALL=$date_locale date +"$date_format")"
-            else
-                echo -n "<div class=\"subtitle\">$(LC_ALL=$date_locale date +"$date_format" --date="$timestamp")"
-            fi
-            if [[ -n ${author:-} ]]; then
-                echo -e " &mdash; \n$author"
-            fi
-            echo "</div>"
-            echo '<!-- text begin -->' # This marks the text body, after the title, date...
-        fi
-        cat "$content" # Actual content
-        if [[ $index == no ]]; then
-            echo -e '\n<!-- text end -->'
+            local clean_title="${title//<p>/}"
+            clean_title="${clean_title//<\/p>/}"
+            printf "%s\n" "$clean_title"
+            printf '</a></h3>\n'
 
+            if [[ -z "$timestamp" ]]; then
+                printf "<!-- %s: #%s# -->\n" "$date_inpost" "$(LC_ALL="$date_locale" date +"$date_format_timestamp")"
+            else
+                printf "<!-- %s: #%s# -->\n" "$date_inpost" "$(LC_ALL="$date_locale" date +"$date_format_timestamp" --date="$timestamp")"
+            fi
+
+            if [[ -z "$timestamp" ]]; then
+                printf "<div class=\"subtitle\">%s" "$(LC_ALL="$date_locale" date +"$date_format")"
+            else
+                printf "<div class=\"subtitle\">%s" "$(LC_ALL="$date_locale" date +"$date_format" --date="$timestamp")"
+            fi
+
+            if [[ -n "$author" ]]; then
+                printf " &mdash; \n%s" "$author"
+            fi
+            printf "</div>\n"
+            printf '<!-- text begin -->\n'
+        fi
+
+        cat "$content"
+
+        if [[ "$index" == "no" ]]; then
+            printf '\n<!-- text end -->\n'
             twitter "$global_url/$file_url"
-
-            echo '<!-- entry end -->' # absolute end of the post
+            printf '<!-- entry end -->\n'
         fi
 
-        echo '</div>' # content
+        printf '</div>\n'
 
         # Add disqus commments except for index and all_posts pages
-        if [[ $index == no ]]; then
+        if [[ "$index" == "no" ]]; then
             disqus_body
         fi
 
-        # page footer
         cat .footer.html
-        # close divs
-        echo '</div></div>' # divbody and divbodyholder
+        printf '</div></div>\n'
         disqus_footer
-        if [[ -n ${body_end_file:-} ]]; then
+        if [[ -n "${body_end_file:-}" ]]; then
             cat "$body_end_file"
         fi
-        echo '</body></html>'
+        printf '</body></html>\n'
     } > "$filename"
 }
 
-# Parse the plain text file into an html file
-#
-# $1    source file name
-# $2    (optional) timestamp for the file
-# $3    (optional) destination file name
-# note that although timestamp is optional, something must be provided at its
-# place if destination file name is provided, i.e:
-# parse_file source.txt "" destination.html
+#######################################
+# Parse the plain text file into an html file.
+# Arguments:
+#   $1: source file name
+#   $2: (optional) timestamp for the file
+#   $3: (optional) destination file name
+#######################################
 parse_file() {
-    # Read for the title and check that the filename is ok
-    title=""
+    local source_file="$1"
+    local timestamp="${2:-}"
+    local dest_filename="${3:-}"
+
+    local title=""
+    local filename=""
+    local content=""
+    local line
+
     while IFS='' read -r line; do
-        if [[ -z ${title:-} ]]; then
+        if [[ -z "${title:-}" ]]; then
             # remove extra <p> and </p> added by markdown
-            title=$(echo "$line" | sed 's/<\/*p>//g')
-            if [[ -n ${3:-} ]]; then
-                filename=$3
+            title=$(printf '%s' "$line" | sed 's/<\/*p>//g')
+            if [[ -n "$dest_filename" ]]; then
+                filename="$dest_filename"
             else
-                filename=$title
-                if [[ -n ${convert_filename:-} ]]; then
-                    filename=$(echo "$title" | eval "$convert_filename")
+                filename="$title"
+                if [[ -n "${convert_filename:-}" ]]; then
+                    # shellcheck disable=SC2086
+                    filename=$(printf '%s' "$title" | eval "$convert_filename")
                 fi
-                if [[ -z ${filename:-} ]]; then
-                    filename=$RANDOM # don't allow empty filenames
+                if [[ -z "${filename:-}" ]]; then
+                    filename="$RANDOM"
                 fi
 
-                filename=$filename.html
+                filename="${filename}.html"
 
-                # Check for duplicate file names
-                while [[ -f $filename ]]; do
-                    filename=${filename%.html}$RANDOM.html
+                while [[ -f "$filename" ]]; do
+                    filename="${filename%.html}$RANDOM.html"
                 done
             fi
-            content=$filename.tmp
-        # Parse possible tags
-        elif [[ $line == "<p>$template_tags_line_header"* ]]; then
-            tags=$(echo "$line" | cut -d ":" -f 2- | sed -e 's/<\/p>//g' -e 's/^ *//' -e 's/ *$//' -e 's/, /,/g')
+            content="${filename}.tmp"
+        elif [[ "$line" == "<p>$template_tags_line_header"* ]]; then
+            local tags
+            tags=$(printf '%s' "$line" | cut -d ":" -f 2- | sed -e 's/<\/p>//g' -e 's/^ *//' -e 's/ *$//' -e 's/, /,/g')
+            local array
             IFS=, read -r -a array <<< "$tags"
 
-            echo -n "<p>$template_tags_line_header " >> "$content"
+            printf "<p>%s " "$template_tags_line_header" >> "$content"
+            local item
             for item in "${array[@]}"; do
-                echo -n "<a href='$prefix_tags$item.html'>$item</a>, "
+                printf "<a href='%s%s.html'>%s</a>, " "$prefix_tags" "$item" "$item"
             done | sed 's/, $/<\/p>/g' >> "$content"
         else
-            echo "$line" >> "$content"
+            printf '%s\n' "$line" >> "$content"
         fi
-    done < "$1"
+    done < "$source_file"
 
-    # Create the actual html page
-    create_html_page "$content" "$filename" no "$title" "${2:-}" "$global_author"
-    rm "$content"
+    create_html_page "$content" "$filename" no "$title" "$timestamp" "$global_author"
+    rm -f "$content"
+    printf '%s\n' "$filename"
 }
 
-# Manages the creation of the text file and the parsing to html file
-# also the drafts
+#######################################
+# Manages the creation of the text file and parsing to HTML.
+# Arguments:
+#   $1: Command ("post").
+#   $2: (optional) "-html" or draft filename.
+#   $3: (optional) draft filename if $2 was "-html".
+#######################################
 write_entry() {
+    local fmt
     if test_markdown; then
-        fmt=md
+        fmt="md"
     else
-        fmt=html
-    fi
-    f=${2:-}
-    if [[ ${2:-} == -html ]]; then
-        fmt=html
-        f=${3:-}
+        fmt="html"
     fi
 
-    if [[ -n $f ]]; then
-        TMPFILE=$f
-        if [[ ! -f $TMPFILE ]]; then
-            echo "The file doesn't exist"
+    local f="${2:-}"
+    if [[ "${2:-}" == "-html" ]]; then
+        fmt="html"
+        f="${3:-}"
+    fi
+
+    local TMPFILE
+    if [[ -n "$f" ]]; then
+        TMPFILE="$f"
+        if [[ ! -f "$TMPFILE" ]]; then
+            printf "The file doesn't exist\n"
             delete_includes
-            exit
+            exit 1
         fi
-        # guess format from TMPFILE
-        extension=${TMPFILE##*.}
-        [[ $extension == md || $extension == html ]] && fmt=$extension
-        # but let user override it (`bb.sh post -html file.md`)
-        [[ $2 == -html ]] && fmt=html
-        # Test if Markdown is working before re-posting a .md file
-        if [[ $extension == md ]]; then
+        local extension="${TMPFILE##*.}"
+        [[ "$extension" == "md" || "$extension" == "html" ]] && fmt="$extension"
+        [[ "${2:-}" == "-html" ]] && fmt="html"
+
+        if [[ "$extension" == "md" ]]; then
             if ! test_markdown; then
-                echo "Markdown is not working, please edit HTML file directly."
-                exit
+                printf "Markdown is not working, please edit HTML file directly.\n"
+                exit 1
             fi
         fi
     else
         TMPFILE=$(mktmp "$fmt")
-        echo -e "Title on this line\n" >> "$TMPFILE"
+        printf "Title on this line\n\n" >> "$TMPFILE"
 
-        [[ $fmt == html ]] && cat << EOF >> "$TMPFILE"
+        if [[ "$fmt" == "html" ]]; then
+            cat <<EOF >> "$TMPFILE"
 <p>The rest of the text file is an <b>html</b> blog post. The process will continue as soon
 as you exit your editor.</p>
 
 <p>$template_tags_line_header keep-this-tag-format, tags-are-optional, example</p>
 EOF
-        [[ $fmt == md ]] && cat << EOF >> "$TMPFILE"
+        elif [[ "$fmt" == "md" ]]; then
+            cat <<EOF >> "$TMPFILE"
 The rest of the text file is a **Markdown** blog post. The process will continue
 as soon as you exit your editor.
 
 $template_tags_line_header keep-this-tag-format, tags-are-optional, beware-with-underscores-in-markdown, example
 EOF
+        fi
     fi
     chmod 600 "$TMPFILE"
 
-    post_status="E"
-    filename=""
-    while [[ $post_status != "p" && $post_status != "P" ]]; do
-        if [[ -n ${filename:-} ]]; then
-            rm "$filename" # Delete the generated html file, if any
+    local post_status="E"
+    local filename=""
+    while [[ "$post_status" != "p" && "$post_status" != "P" ]]; do
+        if [[ -n "${filename:-}" ]]; then
+            rm -f "$filename"
         fi
-        $EDITOR "$TMPFILE"
-        if [[ $fmt == md ]]; then
+        "$EDITOR" "$TMPFILE"
+        if [[ "$fmt" == "md" ]]; then
+            local html_from_md
             html_from_md=$(markdown "$TMPFILE")
-            parse_file "$html_from_md"
-            rm "$html_from_md"
+            filename=$(parse_file "$html_from_md")
+            rm -f "$html_from_md"
         else
-            parse_file "$TMPFILE" # this command sets $filename as the html processed file
+            filename=$(parse_file "$TMPFILE")
         fi
 
         chmod 644 "$filename"
-        [[ -n ${preview_url:-} ]] || preview_url=$global_url
-        echo "To preview the entry, open $preview_url/$filename in your browser"
+        local p_url="${preview_url:-$global_url}"
+        printf "To preview the entry, open %s/%s in your browser\n" "$p_url" "$filename"
 
-        echo -n "[P]ost this entry, [E]dit again, [D]raft for later? (p/E/d) "
+        printf "[P]ost this entry, [E]dit again, [D]raft for later? (p/E/d) "
         read -r post_status
-        if [[ $post_status == d || $post_status == D ]]; then
+        if [[ "$post_status" == "d" || "$post_status" == "D" ]]; then
             mkdir -p "drafts/"
             chmod 700 "drafts/"
 
+            local title
             title=$(head -n 1 "$TMPFILE")
-            if [[ -n ${convert_filename:-} ]]; then
-                title=$(echo "$title" | eval "$convert_filename")
+            if [[ -n "${convert_filename:-}" ]]; then
+                # shellcheck disable=SC2086
+                title=$(printf '%s' "$title" | eval "$convert_filename")
             fi
-            if [[ -z ${title:-} ]]; then
-                title=$RANDOM
-            fi
+            [[ -z "${title:-}" ]] && title="$RANDOM"
 
-            draft=drafts/$title.$fmt
+            local draft="drafts/$title.$fmt"
             mv "$TMPFILE" "$draft"
             chmod 600 "$draft"
-            rm "$filename"
+            rm -f "$filename"
             delete_includes
-            echo "Saved your draft as '$draft'"
+            printf "Saved your draft as '%s'\n" "$draft"
             exit 0
         fi
     done
 
-    if [[ $fmt == md && -n ${save_markdown:-} ]]; then
+    if [[ "$fmt" == "md" && -n "${save_markdown:-}" ]]; then
         mv "$TMPFILE" "${filename%%.*}.md"
     else
-        rm "$TMPFILE"
+        rm -f "$TMPFILE"
     fi
     chmod 644 "$filename"
-    echo "Posted $filename"
+    printf "Posted %s\n" "$filename"
+
+    local relevant_tags
     relevant_tags=$(tags_in_post "$filename")
-    if [[ -n $relevant_tags ]]; then
+    if [[ -n "${relevant_tags:-}" ]]; then
+        local relevant_posts
         # shellcheck disable=SC2086
         relevant_posts="$(posts_with_tags $relevant_tags) $filename"
         rebuild_tags "$relevant_posts" "$relevant_tags"
     fi
 }
 
-# Create an index page with all the posts
+#######################################
+# Create an index page with all the posts.
+# Arguments:
+#   None
+#######################################
 all_posts() {
-    echo -n "Creating an index page with all the posts "
+    printf "Creating an index page with all the posts "
+    local contentfile
     contentfile=$(mktmp)
 
     {
-        echo "<h3>$template_archive_title</h3>"
-        prev_month=""
+        printf "<h3>%s</h3>\n" "$template_archive_title"
+        local prev_month=""
+        local i
         while IFS='' read -r i; do
             is_boilerplate_file "$i" && continue
-            echo -n "." 1>&3
-            # Month headers
-            month=$(LC_ALL=$date_locale date -r "$i" +"$date_allposts_header")
-            if [[ $month != "$prev_month" ]]; then
-                if [[ -n ${prev_month:-} ]]; then
-                    echo "</ul>"  # Don't close ul before first header
-                fi
-                echo "<h4 class='allposts_header'>$month</h4>"
-                echo "<ul>"
-                prev_month=$month
+            printf "." 1>&3
+            local month
+            month=$(LC_ALL="$date_locale" date -r "$i" +"$date_allposts_header")
+            if [[ "$month" != "$prev_month" ]]; then
+                [[ -n "$prev_month" ]] && printf "</ul>\n"
+                printf "<h4 class='allposts_header'>%s</h4>\n" "$month"
+                printf "<ul>\n"
+                prev_month="$month"
             fi
-            # Title
+            local title
             title=$(get_post_title "$i")
-            echo -n "<li><a href=\"$i\">$title</a> &mdash;"
-            # Date
-            date=$(LC_ALL=$date_locale date -r "$i" +"$date_format")
-            echo " $date</li>"
+            printf "<li><a href=\"%s\">%s</a> &mdash;" "$i" "$title"
+            local p_date
+            p_date=$(LC_ALL="$date_locale" date -r "$i" +"$date_format")
+            printf " %s</li>\n" "$p_date"
         done < <(ls -t ./*.html)
-        echo "" 1>&3
-        echo "</ul>"
-        echo "<div id=\"all_posts\"><a href=\"./$index_file\">$template_archive_index_page</a></div>"
+        printf "\n" 1>&3
+        printf "</ul>\n"
+        printf "<div id=\"all_posts\"><a href=\"./%s\">%s</a></div>\n" "$index_file" "$template_archive_index_page"
     } 3>&1 >"$contentfile"
 
-    create_html_page "$contentfile" "$archive_index.tmp" yes "$global_title &mdash; $template_archive_title" "$global_author"
-    mv "$archive_index.tmp" "$archive_index"
+    create_html_page "$contentfile" "${archive_index}.tmp" yes "$global_title &mdash; $template_archive_title" "" "$global_author"
+    mv "${archive_index}.tmp" "$archive_index"
     chmod 644 "$archive_index"
-    rm "$contentfile"
+    rm -f "$contentfile"
 }
 
-# Create an index page with all the tags
+#######################################
+# Create an index page with all the tags.
+# Arguments:
+#   None
+#######################################
 all_tags() {
-    echo -n "Creating an index page with all the tags "
+    printf "Creating an index page with all the tags "
+    local contentfile
     contentfile=$(mktmp)
 
     {
-        echo "<h3>$template_tags_title</h3>"
-        echo "<ul>"
+        printf "<h3>%s</h3>\n" "$template_tags_title"
+        printf "<ul>\n"
+        local i
         for i in "$prefix_tags"*.html; do
             [[ -f "$i" ]] || break
-            echo -n "." 1>&3
+            printf "." 1>&3
+            local nposts
             nposts=$(grep -c "<\!-- text begin -->" "$i")
-            tagname=${i#"$prefix_tags"}
-            tagname=${tagname%.html}
-            case $nposts in
-                1) word=$template_tags_posts_singular;;
-                2|3|4) word=$template_tags_posts_2_4;;
-                *) word=$template_tags_posts;;
+            local tagname="${i#"$prefix_tags"}"
+            tagname="${tagname%.html}"
+            local word
+            case "$nposts" in
+                1) word="$template_tags_posts_singular" ;;
+                2|3|4) word="$template_tags_posts_2_4" ;;
+                *) word="$template_tags_posts" ;;
             esac
-            echo "<li><a href=\"$i\">$tagname</a> &mdash; $nposts $word</li>"
+            printf "<li><a href=\"%s\">%s</a> &mdash; %s %s</li>\n" "$i" "$tagname" "$nposts" "$word"
         done
-        echo "" 1>&3
-        echo "</ul>"
-        echo "<div id=\"all_posts\"><a href=\"./$index_file\">$template_archive_index_page</a></div>"
+        printf "\n" 1>&3
+        printf "</ul>\n"
+        printf "<div id=\"all_posts\"><a href=\"./%s\">%s</a></div>\n" "$index_file" "$template_archive_index_page"
     } 3>&1 > "$contentfile"
 
-    create_html_page "$contentfile" "$tags_index.tmp" yes "$global_title &mdash; $template_tags_title" "$global_author"
-    mv "$tags_index.tmp" "$tags_index"
+    create_html_page "$contentfile" "${tags_index}.tmp" yes "$global_title &mdash; $template_tags_title" "" "$global_author"
+    mv "${tags_index}.tmp" "$tags_index"
     chmod 644 "$tags_index"
-    rm "$contentfile"
+    rm -f "$contentfile"
 }
 
-# Generate the index.html with the content of the latest posts
+#######################################
+# Generate the index.html with the content of the latest posts.
+# Arguments:
+#   None
+#######################################
 rebuild_index() {
-    echo -n "Rebuilding the index "
+    printf "Rebuilding the index "
+    local newindexfile
     newindexfile=$(mktmp)
+    local contentfile
     contentfile=$(mktmp "content")
 
-    # Create the content file
     {
-        n=0
+        local n=0
+        local i
         while IFS='' read -r i; do
-            is_boilerplate_file "$i" && continue;
-            if ((n >= number_of_index_articles)); then break; fi
-            if [[ -n $cut_do ]]; then
+            is_boilerplate_file "$i" && continue
+            ((n >= number_of_index_articles)) && break
+            if [[ -n "${cut_do:-}" ]]; then
                 get_html_file_content 'entry' 'entry' 'cut' <"$i" | awk "/$cut_line/ { print \"<p class=\\\"readmore\\\"><a href=\\\"$i\\\">$template_read_more</a></p>\" ; next } 1"
             else
                 get_html_file_content 'entry' 'entry' <"$i"
             fi
-            echo -n "." 1>&3
+            printf "." 1>&3
             n=$(( n + 1 ))
-        done < <(ls -t ./*.html) # sort by date, newest first
+        done < <(ls -t ./*.html)
 
-        feed=$blog_feed
-        if [[ -n $global_feedburner ]]; then feed=$global_feedburner; fi
-        echo "<div id=\"all_posts\"><a href=\"$archive_index\">$template_archive</a> &mdash; <a href=\"$tags_index\">$template_tags_title</a> &mdash; <a href=\"$feed\">$template_subscribe</a></div>"
+        local feed="${global_feedburner:-$blog_feed}"
+        printf "<div id=\"all_posts\"><a href=\"%s\">%s</a> &mdash; <a href=\"%s\">%s</a> &mdash; <a href=\"%s\">%s</a></div>\n" \
+            "$archive_index" "$template_archive" "$tags_index" "$template_tags_title" "$feed" "$template_subscribe"
     } 3>&1 >"$contentfile"
 
-    echo ""
+    printf "\n"
 
-    create_html_page "$contentfile" "$newindexfile" yes "$global_title" "$global_author"
-    rm "$contentfile"
+    create_html_page "$contentfile" "$newindexfile" yes "$global_title" "" "$global_author"
+    rm -f "$contentfile"
     mv "$newindexfile" "$index_file"
     chmod 644 "$index_file"
 }
 
+#######################################
 # Finds all tags referenced in one post.
-# Accepts either filename as first argument, or post content at stdin
-# Prints one line with space-separated tags to stdout
+# Arguments:
+#   $1: Path to the HTML file.
+# Outputs:
+#   Space-separated list of tags.
+#######################################
 tags_in_post() {
-    sed -n "/^<p>$template_tags_line_header/{s/^<p>$template_tags_line_header//;s/<[^>]*>//g;s/[ ,]\+/ /g;p;}" "$1" | tr ', ' ' '
+    local post_file="$1"
+    sed -n "/^<p>$template_tags_line_header/{s/^<p>$template_tags_line_header//;s/<[^>]*>//g;s/[ ,]\+/ /g;p;}" "$post_file" | tr ', ' ' '
 }
 
+#######################################
 # Finds all posts referenced in a number of tags.
-# Arguments are tags
-# Prints one line with space-separated tags to stdout
+# Arguments:
+#   Tags as multiple arguments.
+# Outputs:
+#   Space-separated list of post filenames.
+#######################################
 posts_with_tags() {
     if (($# < 1)); then
         return 0
     fi
     local existing_files=()
+    local tag
     for tag in "$@"; do
         if [[ -f "$prefix_tags$tag.html" ]]; then
             existing_files+=("$prefix_tags$tag.html")
@@ -866,357 +986,412 @@ posts_with_tags() {
     return 0
 }
 
-# Rebuilds tag_*.html files
-# if no arguments given, rebuilds all of them
-# if arguments given, they should have this format:
-# "FILE1 [FILE2 [...]]" "TAG1 [TAG2 [...]]"
-# where FILEn are files with posts which should be used for rebuilding tags,
-# and TAGn are names of tags which should be rebuilt.
-# example:
-# rebuild_tags "one_post.html another_article.html" "example-tag another-tag"
-# mind the quotes!
+#######################################
+# Rebuilds tag_*.html files.
+# Arguments:
+#   $1: (optional) List of files.
+#   $2: (optional) List of tags.
+#######################################
 rebuild_tags() {
-    local files="" tags="" all_tags="" n=0 tmpfile="" tagname=""
+    local files=""
+    local tags=""
+    local all_tags=""
+    local n=0
+    local tmpfile=""
+    local tagname=""
+
     if (($# < 2)); then
-        # will process all files and tags
         if ! ls ./*.html &> /dev/null; then
             return 0
         fi
         files=$(ls -t ./*.html)
         all_tags=yes
     else
-        # will process only given files and tags
         # shellcheck disable=SC2086
         files=$(printf '%s\n' $1 | sort -u)
-        if [[ -n ${files:-} ]]; then
+        if [[ -n "${files:-}" ]]; then
             # shellcheck disable=SC2086
             files=$(ls -t $files)
         fi
-        tags=$2
+        tags="$2"
     fi
-    echo -n "Rebuilding tag pages "
-    n=0
-    if [[ -n ${all_tags:-} ]]; then
+
+    printf "Rebuilding tag pages "
+    if [[ -n "${all_tags:-}" ]]; then
         rm -f ./"$prefix_tags"*.html &> /dev/null || true
     else
-        for i in ${tags:-}; do
-            rm -f "./$prefix_tags$i.html" &> /dev/null || true
+        local t
+        for t in ${tags:-}; do
+            rm -f "./$prefix_tags$t.html" &> /dev/null || true
         done
     fi
-    # First we will process all files and create temporal tag files
-    # with just the content of the posts
+
     tmpfile=$(mktmp)
+    local i
     while IFS='' read -r i; do
-        if [[ -z ${i:-} ]]; then continue; fi
-        is_boilerplate_file "$i" && continue;
-        echo -n "."
-        if [[ -n ${cut_do:-} ]]; then
+        if [[ -z "${i:-}" ]]; then continue; fi
+        is_boilerplate_file "$i" && continue
+        printf "."
+        if [[ -n "${cut_do:-}" ]]; then
             get_html_file_content 'entry' 'entry' 'cut' <"$i" | awk "/$cut_line/ { print \"<p class=\\\"readmore\\\"><a href=\\\"$i\\\">$template_read_more</a></p>\" ; next } 1"
         else
             get_html_file_content 'entry' 'entry' <"$i"
         fi >"$tmpfile"
+        local tag
         for tag in $(tags_in_post "$i"); do
-            if [[ -n ${all_tags:-} || " ${tags:-} " == *" $tag "* ]]; then
-                cat "$tmpfile" >> "$prefix_tags$tag".tmp.html
+            if [[ -n "${all_tags:-}" || " ${tags:-} " == *" $tag "* ]]; then
+                printf '%s' "$(cat "$tmpfile")" >> "$prefix_tags$tag.tmp.html"
             fi
         done
     done <<< "$files"
     rm -f "$tmpfile"
-    # Now generate the tag files with headers, footers, etc
+
     if ls ./"$prefix_tags"*.tmp.html &> /dev/null; then
         while IFS='' read -r i; do
-            tagname=${i#./"$prefix_tags"}
-            tagname=${tagname%.tmp.html}
-            create_html_page "$i" "$prefix_tags$tagname.html" yes "$global_title &mdash; $template_tag_title \"$tagname\"" "$global_author"
+            tagname="${i#./"$prefix_tags"}"
+            tagname="${tagname%.tmp.html}"
+            create_html_page "$i" "$prefix_tags$tagname.html" yes "$global_title &mdash; $template_tag_title \"$tagname\"" "" "$global_author"
             rm -f "$i"
         done < <(ls -t ./"$prefix_tags"*.tmp.html 2>/dev/null)
     fi
-    echo
+    printf "\n"
 }
 
-# Return the post title
-#
-# $1 the html file
+#######################################
+# Return the post title.
+# Arguments:
+#   $1: Path to the HTML file.
+#######################################
 get_post_title() {
-    awk '/<h3><a class="ablack" href=".+">/, /<\/a><\/h3>/{if (!/<h3><a class="ablack" href=".+">/ && !/<\/a><\/h3>/) print}' "$1"
+    local html_file="$1"
+    awk '/<h3><a class="ablack" href=".+">/, /<\/a><\/h3>/{if (!/<h3><a class="ablack" href=".+">/ && !/<\/a><\/h3>/) print}' "$html_file"
 }
 
-# Return the post author
-#
-# $1 the html file
+#######################################
+# Return the post author.
+# Arguments:
+#   $1: Path to the HTML file.
+#######################################
 get_post_author() {
-    awk '/<div class="subtitle">.+/, /<!-- text begin -->/{if (!/<div class="subtitle">.+/ && !/<!-- text begin -->/) print}' "$1" | sed 's/<\/div>//g'
+    local html_file="$1"
+    awk '/<div class="subtitle">.+/, /<!-- text begin -->/{if (!/<div class="subtitle">.+/ && !/<!-- text begin -->/) print}' "$html_file" | sed 's/<\/div>//g'
 }
 
-# Displays a list of the tags
-#
-# $2 if "-n", tags will be sorted by number of posts
+#######################################
+# Displays a list of the tags.
+# Arguments:
+#   $2: if "-n", tags will be sorted by number of posts.
+#######################################
 list_tags() {
-    if [[ ${2:-} == -n ]]; then do_sort=1; else do_sort=0; fi
+    local do_sort=0
+    if [[ "${2:-}" == "-n" ]]; then do_sort=1; fi
 
     if ! ls ./"$prefix_tags"*.html &> /dev/null; then
-        echo "No posts yet. Use 'bb.sh post' to create one" && return
+        printf "No posts yet. Use 'bb.sh post' to create one\n"
+        return 0
     fi
 
-    lines=""
+    local lines=""
+    local i
     for i in "$prefix_tags"*.html; do
         [[ -f "$i" ]] || break
+        local nposts
         nposts=$(grep -c "<\!-- text begin -->" "$i")
-        tagname=${i#"$prefix_tags"}
-        tagname=${tagname#.html}
-        ((nposts > 1)) && word=$template_tags_posts || word=$template_tags_posts_singular
-        line="$tagname # $nposts # $word"
-        lines+=$line\\n
+        local tagname="${i#"$prefix_tags"}"
+        tagname="${tagname%.html}"
+        local word
+        ((nposts > 1)) && word="$template_tags_posts" || word="$template_tags_posts_singular"
+        lines+="$tagname # $nposts # $word\n"
     done
 
     if (( do_sort == 1 )); then
-        echo -e "$lines" | column -t -s "#" | sort -nrk 2
+        printf "%b" "$lines" | column -t -s "#" | sort -nrk 2
     else
-        echo -e "$lines" | column -t -s "#"
+        printf "%b" "$lines" | column -t -s "#"
     fi
 }
 
-# Displays a list of the posts
+#######################################
+# Displays a list of the posts.
+# Arguments:
+#   None
+#######################################
 list_posts() {
     if ! ls ./*.html &> /dev/null; then
-        echo "No posts yet. Use 'bb.sh post' to create one" && return
+        printf "No posts yet. Use 'bb.sh post' to create one\n"
+        return 0
     fi
 
-    lines=""
-    n=1
+    local lines=""
+    local n=1
+    local i
     while IFS='' read -r i; do
         is_boilerplate_file "$i" && continue
-        line="$n # $(get_post_title "$i") # $(LC_ALL=$date_locale date -r "$i" +"$date_format")"
-        lines+=$line\\n
+        lines+="$n # $(get_post_title "$i") # $(LC_ALL="$date_locale" date -r "$i" +"$date_format")\n"
         n=$(( n + 1 ))
     done < <(ls -t ./*.html)
 
-    echo -e "$lines" | column -t -s "#"
+    printf "%b" "$lines" | column -t -s "#"
 }
 
-# Generate the feed file
+#######################################
+# Generate the feed file.
+# Arguments:
+#   None
+#######################################
 make_rss() {
-    echo -n "Making RSS "
-
+    printf "Making RSS "
+    local rssfile
     rssfile=$(mktmp)
 
     {
+        local pubdate
         pubdate=$(LC_ALL=C date +"$date_format_full")
-        echo '<?xml version="1.0" encoding="UTF-8" ?>'
-        echo '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">'
-        echo "<channel><title>$global_title</title><link>$global_url/$index_file</link>"
-        echo "<description>$global_description</description><language>en</language>"
-        echo "<lastBuildDate>$pubdate</lastBuildDate>"
-        echo "<pubDate>$pubdate</pubDate>"
-        echo "<atom:link href=\"$global_url/$blog_feed\" rel=\"self\" type=\"application/rss+xml\" />"
+        cat <<EOF
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel><title>${global_title}</title><link>${global_url}/${index_file}</link>
+<description>${global_description}</description><language>en</language>
+<lastBuildDate>${pubdate}</lastBuildDate>
+<pubDate>${pubdate}</pubDate>
+<atom:link href="${global_url}/${blog_feed}" rel="self" type="application/rss+xml" />
+EOF
 
-        n=0
+        local n=0
+        local i
         while IFS='' read -r i; do
             is_boilerplate_file "$i" && continue
-            ((n >= number_of_feed_articles)) && break # max 10 items
-            echo -n "." 1>&3
-            echo '<item><title>'
+            ((n >= number_of_feed_articles)) && break
+            printf "." 1>&3
+            printf '<item><title>'
             get_post_title "$i"
-            echo '</title><description><![CDATA['
-            get_html_file_content 'text' 'entry' $cut_do <"$i"
-            echo "]]></description><link>$global_url/${i#./}</link>"
-            echo "<guid>$global_url/$i</guid>"
-            echo "<dc:creator>$(get_post_author "$i")</dc:creator>"
-            echo "<pubDate>$(LC_ALL=C date -r "$i" +"$date_format_full")</pubDate></item>"
-
+            printf '</title><description><![CDATA['
+            get_html_file_content 'text' 'entry' "$cut_do" <"$i"
+            cat <<EOF
+]]></description><link>${global_url}/${i#./}</link>
+<guid>${global_url}/$i</guid>
+<dc:creator>$(get_post_author "$i")</dc:creator>
+<pubDate>$(LC_ALL=C date -r "$i" +"$date_format_full")</pubDate></item>
+EOF
             n=$(( n + 1 ))
         done < <(ls -t ./*.html)
 
-        echo '</channel></rss>'
+        printf '</channel></rss>\n'
     } 3>&1 >"$rssfile"
-    echo ""
+    printf "\n"
 
     mv "$rssfile" "$blog_feed"
     chmod 644 "$blog_feed"
 }
 
-# generate headers, footers, etc
+#######################################
+# Generate headers, footers, etc.
+# Arguments:
+#   None
+#######################################
 create_includes() {
     {
-        echo "<h1 class=\"nomargin\"><a class=\"ablack\" href=\"$global_url/$index_file\">$global_title</a></h1>"
-        echo "<div id=\"description\">$global_description</div>"
+        printf "<h1 class=\"nomargin\"><a class=\"ablack\" href=\"%s/%s\">%s</a></h1>\n" "$global_url" "$index_file" "$global_title"
+        printf "<div id=\"description\">%s</div>\n" "$global_description"
     } > ".title.html"
 
-    if [[ -f $header_file ]]; then cp "$header_file" .header.html
-    else {
-        echo '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'
-        echo '<html xmlns="http://www.w3.org/1999/xhtml"><head>'
-        echo '<meta http-equiv="Content-type" content="text/html;charset=UTF-8" />'
-        echo '<meta name="viewport" content="width=device-width, initial-scale=1.0" />'
-        printf '<link rel="stylesheet" href="%s" type="text/css" />\n' "${css_include[@]}"
-        if [[ -z $global_feedburner ]]; then
-            echo "<link rel=\"alternate\" type=\"application/rss+xml\" title=\"$template_subscribe_browser_button\" href=\"$blog_feed\" />"
-        else
-            echo "<link rel=\"alternate\" type=\"application/rss+xml\" title=\"$template_subscribe_browser_button\" href=\"$global_feedburner\" />"
-        fi
+    if [[ -f "${header_file:-}" ]]; then
+        cp "$header_file" .header.html
+    else
+        {
+            cat <<EOF
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"><head>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+EOF
+            local css
+            for css in "${css_include[@]}"; do
+                printf '<link rel="stylesheet" href="%s" type="text/css" />\n' "$css"
+            done
+            local feed="${global_feedburner:-$blog_feed}"
+            printf "<link rel=\"alternate\" type=\"application/rss+xml\" title=\"%s\" href=\"%s\" />\n" \
+                "$template_subscribe_browser_button" "$feed"
         } > ".header.html"
     fi
 
-    if [[ -f $footer_file ]]; then cp "$footer_file" .footer.html
-    else {
-        protected_mail=${global_email//@/&#64;}
-        protected_mail=${protected_mail//./&#46;}
-        echo "<div id=\"footer\">$global_license <a href=\"$global_author_url\">$global_author</a> &mdash; <a href=\"mailto:$protected_mail\">$protected_mail</a><br/>"
-        echo 'Generated with <a href="https://github.com/cfenollosa/bashblog">bashblog</a>, a single bash script to easily create blogs like this one</div>'
-        } >> ".footer.html"
+    if [[ -f "${footer_file:-}" ]]; then
+        cp "$footer_file" .footer.html
+    else
+        local protected_mail
+        protected_mail="${global_email//@/&#64;}"
+        protected_mail="${protected_mail//./&#46;}"
+        cat <<EOF > ".footer.html"
+<div id="footer">${global_license} <a href="${global_author_url}">${global_author}</a> &mdash; <a href="mailto:${protected_mail}">${protected_mail}</a><br/>
+Generated with <a href="https://github.com/cfenollosa/bashblog">bashblog</a>, a single bash script to easily create blogs like this one</div>
+EOF
     fi
 }
 
-# Delete the temporarily generated include files
+#######################################
+# Delete the temporarily generated include files.
+# Arguments:
+#   None
+#######################################
 delete_includes() {
     rm -f ".title.html" ".footer.html" ".header.html"
     return 0
 }
 
-# Create the css file from scratch
+#######################################
+# Create the css file from scratch.
+# Arguments:
+#   None
+#######################################
 create_css() {
-    # To avoid overwriting manual changes. However it is recommended that
-    # this function is modified if the user changes the blog.css file
     if (( ${#css_include[@]} > 0 )); then
         return 0
     fi
     css_include=('main.css' 'blog.css')
     if [[ ! -f blog.css ]]; then
-        # blog.css directives will be loaded after main.css and thus will prevail
-        echo '#title{font-size: x-large;}
-        a.ablack{color:black !important;}
-        li{margin-bottom:8px;}
-        ul,ol{margin-left:24px;margin-right:24px;}
-        #all_posts{margin-top:24px;text-align:center;}
-        .subtitle{font-size:small;margin:12px 0px;}
-        .content p{margin-left:24px;margin-right:24px;}
-        h1{margin-bottom:12px !important;}
-        #description{font-size:large;margin-bottom:12px;}
-        h3{margin-top:42px;margin-bottom:8px;}
-        h4{margin-left:24px;margin-right:24px;}
-        img{max-width:100%;}
-        #twitter{line-height:20px;vertical-align:top;text-align:right;font-style:italic;color:#333;margin-top:24px;font-size:14px;}' > blog.css
+        cat <<EOF > blog.css
+#title{font-size: x-large;}
+a.ablack{color:black !important;}
+li{margin-bottom:8px;}
+ul,ol{margin-left:24px;margin-right:24px;}
+#all_posts{margin-top:24px;text-align:center;}
+.subtitle{font-size:small;margin:12px 0px;}
+.content p{margin-left:24px;margin-right:24px;}
+h1{margin-bottom:12px !important;}
+#description{font-size:large;margin-bottom:12px;}
+h3{margin-top:42px;margin-bottom:8px;}
+h4{margin-left:24px;margin-right:24px;}
+img{max-width:100%;}
+#twitter{line-height:20px;vertical-align:top;text-align:right;font-style:italic;color:#333;margin-top:24px;font-size:14px;}
+EOF
     fi
 
-    # If there is a style.css from the parent page (i.e. some landing page)
-    # then use it. This directive is here for compatibility with my own
-    # home page. Feel free to edit it out, though it doesn't hurt
     if [[ -f ../style.css ]] && [[ ! -f main.css ]]; then
         ln -s "../style.css" "main.css"
     elif [[ ! -f main.css ]]; then
-        echo 'body{font-family:Georgia,"Times New Roman",Times,serif;margin:0;padding:0;background-color:#F3F3F3;}
-        #divbodyholder{padding:5px;background-color:#DDD;width:100%;max-width:874px;margin:24px auto;}
-        #divbody{border:solid 1px #ccc;background-color:#fff;padding:0px 48px 24px 48px;top:0;}
-        .headerholder{background-color:#f9f9f9;border-top:solid 1px #ccc;border-left:solid 1px #ccc;border-right:solid 1px #ccc;}
-        .header{width:100%;max-width:800px;margin:0px auto;padding-top:24px;padding-bottom:8px;}
-        .content{margin-bottom:5%;}
-        .nomargin{margin:0;}
-        .description{margin-top:10px;border-top:solid 1px #666;padding:10px 0;}
-        h3{font-size:20pt;width:100%;font-weight:bold;margin-top:32px;margin-bottom:0;}
-        .clear{clear:both;}
-        #footer{padding-top:10px;border-top:solid 1px #666;color:#333333;text-align:center;font-size:small;font-family:"Courier New","Courier",monospace;}
-        a{text-decoration:none;color:#003366 !important;}
-        a:visited{text-decoration:none;color:#336699 !important;}
-        blockquote{background-color:#f9f9f9;border-left:solid 4px #e9e9e9;margin-left:12px;padding:12px 12px 12px 24px;}
-        blockquote img{margin:12px 0px;}
-        blockquote iframe{margin:12px 0px;}' > main.css
+        cat <<EOF > main.css
+body{font-family:Georgia,"Times New Roman",Times,serif;margin:0;padding:0;background-color:#F3F3F3;}
+#divbodyholder{padding:5px;background-color:#DDD;width:100%;max-width:874px;margin:24px auto;}
+#divbody{border:solid 1px #ccc;background-color:#fff;padding:0px 48px 24px 48px;top:0;}
+.headerholder{background-color:#f9f9f9;border-top:solid 1px #ccc;border-left:solid 1px #ccc;border-right:solid 1px #ccc;}
+.header{width:100%;max-width:800px;margin:0px auto;padding-top:24px;padding-bottom:8px;}
+.content{margin-bottom:5%;}
+.nomargin{margin:0;}
+.description{margin-top:10px;border-top:solid 1px #666;padding:10px 0;}
+h3{font-size:20pt;width:100%;font-weight:bold;margin-top:32px;margin-bottom:0;}
+.clear{clear:both;}
+#footer{padding-top:10px;border-top:solid 1px #666;color:#333333;text-align:center;font-size:small;font-family:"Courier New","Courier",monospace;}
+a{text-decoration:none;color:#003366 !important;}
+a:visited{text-decoration:none;color:#336699 !important;}
+blockquote{background-color:#f9f9f9;border-left:solid 4px #e9e9e9;margin-left:12px;padding:12px 12px 12px 24px;}
+blockquote img{margin:12px 0px;}
+blockquote iframe{margin:12px 0px;}
+EOF
     fi
     return 0
 }
 
-# Regenerates all the single post entries, keeping the post content but modifying
-# the title, html structure, etc
+#######################################
+# Regenerates all single post entries.
+# Arguments:
+#   None
+#######################################
 rebuild_all_entries() {
-    echo -n "Rebuilding all entries "
+    printf "Rebuilding all entries "
 
+    local i
     for i in ./*.html; do
-        is_boilerplate_file "$i" && continue;
+        is_boilerplate_file "$i" && continue
+        local contentfile
         contentfile=$(mktmp)
 
-        echo -n "."
-        # Get the title and entry, and rebuild the html structure from scratch (divs, title, description...)
+        printf "."
+        local title
         title=$(get_post_title "$i")
 
         get_html_file_content 'text' 'text' <"$i" >> "$contentfile"
 
-        # Read timestamp from post, if present, and sync file timestamp
+        local timestamp
         timestamp=$(awk '/<!-- '$date_inpost': .+ -->/ { print }' "$i" | cut -d '#' -f 2)
-        if [[ -n ${timestamp:-} ]]; then
+        if [[ -n "${timestamp:-}" ]]; then
             touch -t "$timestamp" "$i"
         fi
-        # Read timestamp from file in correct format for 'create_html_page'
         timestamp=$(LC_ALL=C date -r "$i" +"$date_format_full")
 
         create_html_page "$contentfile" "$i.rebuilt" no "$title" "$timestamp" "$(get_post_author "$i")"
-        # keep the original timestamp!
         timestamp=$(LC_ALL=C date -r "$i" +"$date_format_timestamp")
         mv "$i.rebuilt" "$i"
         chmod 644 "$i"
         touch -t "$timestamp" "$i"
         rm -f "$contentfile"
     done
-    echo ""
+    printf "\n"
     return 0
 }
 
-# Displays the help
+#######################################
+# Displays the help.
+# Arguments:
+#   None
+#######################################
 usage() {
-    echo "$global_software_name v$global_software_version"
-    echo "Usage: $0 command [filename]"
-    echo ""
-    echo "Commands:"
-    echo "    post [-html] [filename] insert a new blog post, or the filename of a draft to continue editing it"
-    echo "                            it tries to use markdown by default, and falls back to HTML if it's not available."
-    echo "                            use '-html' to override it and edit the post as HTML even when markdown is available"
-    echo "    edit [-n|-f] [filename] edit an already published .html or .md file. **NEVER** edit manually a published .html file,"
-    echo "                            always use this function as it keeps internal data and rebuilds the blog"
-    echo "                            use '-n' to give the file a new name, if title was changed"
-    echo "                            use '-f' to edit full html file, instead of just text part (also preserves name)"
-    echo "    delete [filename]       deletes the post and rebuilds the blog"
-    echo "    rebuild                 regenerates all the pages and posts, preserving the content of the entries"
-    echo "    reset                   deletes everything except this script. Use with a lot of caution and back up first!"
-    echo "    list                    list all posts"
-    echo "    tags [-n]               list all tags in alphabetical order"
-    echo "                            use '-n' to sort list by number of posts"
-    echo ""
-    echo "For more information please open $0 in a code editor and read the header and comments"
+    printf "%s v%s\n" "$global_software_name" "$global_software_version"
+    printf "Usage: %s command [filename]\n\n" "$0"
+    printf "Commands:\n"
+    printf "    post [-html] [filename] insert a new blog post, or the filename of a draft to continue editing it\n"
+    printf "                            it tries to use markdown by default, and falls back to HTML if it's not available.\n"
+    printf "                            use '-html' to override it and edit the post as HTML even when markdown is available\n"
+    printf "    edit [-n|-f] [filename] edit an already published .html or .md file. **NEVER** edit manually a published .html file,\n"
+    printf "                            always use this function as it keeps internal data and rebuilds the blog\n"
+    printf "                            use '-n' to give the file a new name, if title was changed\n"
+    printf "                            use '-f' to edit full html file, instead of just text part (also preserves name)\n"
+    printf "    delete [filename]       deletes the post and rebuilds the blog\n"
+    printf "    rebuild                 regenerates all the pages and posts, preserving the content of the entries\n"
+    printf "    reset                   deletes everything except this script. Use with a lot of caution and back up first!\n"
+    printf "    list                    list all posts\n"
+    printf "    tags [-n]               list all tags in alphabetical order\n"
+    printf "                            use '-n' to sort list by number of posts\n\n"
+    printf "For more information please open %s in a code editor and read the header and comments\n" "$0"
 }
 
-# Delete all generated content, leaving only this script
+#######################################
+# Delete all generated content, leaving only this script.
+# Arguments:
+#   None
+#######################################
 reset() {
-    echo "Are you sure you want to delete all blog entries? Please write \"Yes, I am!\" "
+    printf 'Are you sure you want to delete all blog entries? Please write "Yes, I am!" \n'
+    local line
     read -r line
-    if [[ $line == "Yes, I am!" ]]; then
-        rm -f .*.html ./*.html ./*.css ./*.rss &> /dev/null
-        echo
-        echo "Deleted all posts, stylesheets and feeds."
-        echo "Kept your old '.backup.tar.gz' just in case, please delete it manually if needed."
+    if [[ "$line" == "Yes, I am!" ]]; then
+        rm -f .*.html ./*.html ./*.css ./*.rss &> /dev/null || true
+        printf "\nDeleted all posts, stylesheets and feeds.\n"
+        printf "Kept your old '.backup.tar.gz' just in case, please delete it manually if needed.\n"
     else
-        echo "Phew! You dodged a bullet there. Nothing was modified."
+        printf "Phew! You dodged a bullet there. Nothing was modified.\n"
     fi
     return 0
 }
 
-# Detects if GNU date is installed
+#######################################
+# Detects if GNU date is installed and sets aliases if needed.
+# Arguments:
+#   None
+#######################################
 date_version_detect() {
-	if ! date --version >/dev/null 2>&1; then
-		# date utility is BSD. Test if gdate is installed
-		if gdate --version >/dev/null 2>&1 ; then
+    if ! date --version >/dev/null 2>&1; then
+        if gdate --version >/dev/null 2>&1 ; then
             date() {
                 gdate "$@"
             }
-		else
-            # BSD date
+        else
             date() {
-                if [[ $1 == -r ]]; then
-                    # Fall back to using stat for 'date -r'
-                    format=${3//+/}
+                if [[ "$1" == "-r" ]]; then
+                    local format="${3//+/}"
                     stat -f "%Sm" -t "$format" "$2"
-                elif [[ $2 == --date* ]]; then
-                    # convert between dates using BSD date syntax
+                elif [[ "${2:-}" == --date* ]]; then
                     command date -j -f "$date_format_full" "${2#--date=}" "$1"
                 else
-                    # acceptable format for BSD date
                     command date -j "$@"
                 fi
             }
@@ -1224,26 +1399,22 @@ date_version_detect() {
     fi
 }
 
-# Main function
-# Encapsulated on its own function for readability purposes
-#
-# $1     command to run
-# $2     file name of a draft to continue editing (optional)
+#######################################
+# Main execution function.
+# Arguments:
+#   $@: Command line arguments.
+#######################################
 do_main() {
-    # Detect if using BSD date or GNU date
     date_version_detect
-    # Load default configuration, then override settings with the config file
     global_variables
-    # shellcheck disable=SC1090
-    if [[ -f "$global_config" ]]; then
+    if [[ -f "$GLOBAL_CONFIG" ]]; then
         # shellcheck disable=SC1090
-        source "$global_config" &> /dev/null
+        source "$GLOBAL_CONFIG" &> /dev/null
     fi
     global_variables_check
 
-    # Check for $EDITOR
-    if [[ -z ${EDITOR:-} ]]; then
-        echo "Please set your \$EDITOR environment variable. For example, to use nano, add the line 'export EDITOR=nano' to your \$HOME/.bashrc file"
+    if [[ -z "${EDITOR:-}" ]]; then
+        printf "Please set your \$EDITOR environment variable. For example, to use nano, add the line 'export EDITOR=nano' to your \$HOME/.bashrc file\n"
         exit 1
     fi
 
@@ -1252,66 +1423,62 @@ do_main() {
         exit 0
     fi
 
-    # Check for validity of argument
     case "$1" in
         reset|post|rebuild|list|edit|delete|tags) ;;
         *) usage; exit 0 ;;
     esac
 
-    if [[ $1 == list ]]; then
+    if [[ "$1" == "list" ]]; then
         list_posts
         exit 0
     fi
 
-    if [[ $1 == tags ]]; then
+    if [[ "$1" == "tags" ]]; then
         list_tags "$@"
         exit 0
     fi
 
-    if [[ $1 == edit ]]; then
-        if (($# < 2)) || [[ ! -f ${!#} ]]; then
-            echo "Please enter a valid .md or .html file to edit"
-            exit
+    if [[ "$1" == "edit" ]]; then
+        if (($# < 2)) || [[ ! -f "${!#}" ]]; then
+            printf "Please enter a valid .md or .html file to edit\n"
+            exit 1
         fi
     fi
 
-    # Test for existing html files
     if ls ./*.html &> /dev/null; then
-        # We're going to back up just in case
         if tar -c -z -f ".backup.tar.gz" -- *.html; then
             chmod 600 ".backup.tar.gz"
         fi
-    elif [[ $1 == rebuild ]]; then
-        echo "Can't find any html files, nothing to rebuild"
+    elif [[ "$1" == "rebuild" ]]; then
+        printf "Can't find any html files, nothing to rebuild\n"
         exit 1
     fi
 
-    # Keep first backup of this day containing yesterday's version of the blog
-    if [[ -f .backup.tar.gz ]]; then
+    if [[ -f ".backup.tar.gz" ]]; then
         if [[ ! -f .yesterday.tar.gz || $(date -r .yesterday.tar.gz +'%d') != "$(date +'%d')" ]]; then
             cp .backup.tar.gz .yesterday.tar.gz &> /dev/null || true
         fi
     fi
 
-    if [[ $1 == reset ]]; then
+    if [[ "$1" == "reset" ]]; then
         reset
         exit 0
     fi
 
     create_css
     create_includes
-    if [[ $1 == post ]]; then
+    if [[ "$1" == "post" ]]; then
         write_entry "$@"
-    elif [[ $1 == rebuild ]]; then
+    elif [[ "$1" == "rebuild" ]]; then
         rebuild_all_entries
         rebuild_tags
-    elif [[ $1 == delete ]]; then
-        rm "$2" &> /dev/null || true
+    elif [[ "$1" == "delete" ]]; then
+        rm -f "$2" &> /dev/null || true
         rebuild_tags
-    elif [[ $1 == edit ]]; then
-        if [[ $2 == -n ]]; then
+    elif [[ "$1" == "edit" ]]; then
+        if [[ "${2:-}" == "-n" ]]; then
             edit "$3"
-        elif [[ $2 == -f ]]; then
+        elif [[ "${2:-}" == "-f" ]]; then
             edit "$3" full
         else
             edit "$2" keep
@@ -1324,11 +1491,7 @@ do_main() {
     delete_includes
 }
 
-
-#
 # MAIN
-# Do not change anything here. If you want to modify the code, edit do_main()
-#
 do_main "$@"
 
 # vim: set shiftwidth=4 tabstop=4 expandtab:
