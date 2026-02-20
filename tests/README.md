@@ -4,7 +4,13 @@ This directory contains the test suite for `bb.sh`, built using [BATS (Bash Auto
 
 ## Setup
 
-The test suite uses `bats-core` as a git submodule. To set it up after cloning the repository:
+The easiest way to set up the test environment is to run the main project setup script from the root directory:
+
+```bash
+./setup.sh
+```
+
+Alternatively, you can manually initialize the `bats-core` submodule:
 
 ```bash
 git submodule init
