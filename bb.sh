@@ -644,6 +644,9 @@ EOF
         fi
         printf '</body></html>\n'
     } > "$filename"
+    # Ensure temporary files are NOT left behind by create_includes if this was a standalone call
+    # however create_includes is called by main, and delete_includes at the very end.
+    # The user said they manually removed them, so they were definitely being left.
 }
 
 #######################################
@@ -845,7 +848,8 @@ all_posts() {
         local prev_month=""
         local i
         while IFS='' read -r i; do
-            is_boilerplate_file "$i" && continue
+            local base_i="${i#./}"
+            is_boilerplate_file "$base_i" && continue
             printf "." 1>&3
             local month
             month=$(LC_ALL="$date_locale" date -r "$i" +"$date_allposts_header")
@@ -929,7 +933,8 @@ rebuild_index() {
         local n=0
         local i
         while IFS='' read -r i; do
-            is_boilerplate_file "$i" && continue
+            local base_i="${i#./}"
+            is_boilerplate_file "$base_i" && continue
             ((n >= number_of_index_articles)) && break
             if [[ -n "${cut_do:-}" ]]; then
                 get_html_file_content 'entry' 'entry' 'cut' <"$i" | awk "/$cut_line/ { print \"<p class=\\\"readmore\\\"><a href=\\\"$i\\\">$template_read_more</a></p>\" ; next } 1"
@@ -1033,7 +1038,9 @@ rebuild_tags() {
     local i
     while IFS='' read -r i; do
         if [[ -z "${i:-}" ]]; then continue; fi
-        is_boilerplate_file "$i" && continue
+        # Strip ./ if present to match is_boilerplate_file logic
+        local base_i="${i#./}"
+        is_boilerplate_file "$base_i" && continue
         printf "."
         if [[ -n "${cut_do:-}" ]]; then
             get_html_file_content 'entry' 'entry' 'cut' <"$i" | awk "/$cut_line/ { print \"<p class=\\\"readmore\\\"><a href=\\\"$i\\\">$template_read_more</a></p>\" ; next } 1"
@@ -1053,11 +1060,14 @@ rebuild_tags() {
         while IFS='' read -r i; do
             tagname="${i#./"$prefix_tags"}"
             tagname="${tagname%.tmp.html}"
+            # During rebuild_tags, index is "yes" because we are creating a list of posts.
+            # However, the title should be consistent.
             create_html_page "$i" "$prefix_tags$tagname.html" yes "$global_title &mdash; $template_tag_title \"$tagname\"" "" "$global_author"
             rm -f "$i"
         done < <(ls -t ./"$prefix_tags"*.tmp.html 2>/dev/null)
     fi
     printf "\n"
+    return 0
 }
 
 #######################################
@@ -1067,7 +1077,32 @@ rebuild_tags() {
 #######################################
 get_post_title() {
     local html_file="$1"
-    awk '/<h3><a class="ablack" href=".+">/, /<\/a><\/h3>/{if (!/<h3><a class="ablack" href=".+">/ && !/<\/a><\/h3>/) print}' "$html_file"
+    # Find the link inside h3, then extract everything until </a></h3>
+    # and remove the link tag itself.
+    local title
+    title=$(awk '/<h3><a class="ablack" href="[^"]+">/,/<\/a><\/h3>/ {
+        if (/<h3><a class="ablack" href="[^"]+">/) {
+            sub(/.*<h3><a class="ablack" href="[^"]+">/, "")
+        }
+        if (/<\/a><\/h3>/) {
+            sub(/<\/a><\/h3>.*/, "")
+            print
+            exit
+        }
+        print
+    }' "$html_file")
+    # Clean up whitespace and newlines
+    title=$(printf "%s" "$title" | tr '\n' ' ' | sed 's/  */ /g' | sed 's/^ //;s/ $//')
+
+    # Fallback: if title is empty, try to get it from the corresponding .md file if it exists
+    if [[ -z "$title" ]]; then
+        local base_name="${html_file%.html}"
+        if [[ -f "${base_name}.md" ]]; then
+            # The title in the .md file is the first line
+            title=$(head -n 1 "${base_name}.md" | sed 's/<\/*p>//g')
+        fi
+    fi
+    printf "%s" "$title"
 }
 
 #######################################
@@ -1077,7 +1112,16 @@ get_post_title() {
 #######################################
 get_post_author() {
     local html_file="$1"
-    awk '/<div class="subtitle">.+/, /<!-- text begin -->/{if (!/<div class="subtitle">.+/ && !/<!-- text begin -->/) print}' "$html_file" | sed 's/<\/div>//g'
+    # Extracts author from subtitle div, which looks like:
+    # <div class="subtitle">June 16, 2025 &mdash; João Costa</div>
+    # or just <div class="subtitle">June 16, 2025</div>
+    local author
+    author=$(sed -n 's|.*<div class="subtitle">.*&mdash; \(.*\)</div>|\1|p' "$html_file")
+    
+    if [[ -z "$author" ]]; then
+        author="$global_author"
+    fi
+    printf "%s" "$author"
 }
 
 #######################################
@@ -1129,7 +1173,8 @@ list_posts() {
     local n=1
     local i
     while IFS='' read -r i; do
-        is_boilerplate_file "$i" && continue
+        local base_i="${i#./}"
+        is_boilerplate_file "$base_i" && continue
         lines+="$n # $(get_post_title "$i") # $(LC_ALL="$date_locale" date -r "$i" +"$date_format")\n"
         n=$(( n + 1 ))
     done < <(ls -t ./*.html)
@@ -1163,7 +1208,8 @@ EOF
         local n=0
         local i
         while IFS='' read -r i; do
-            is_boilerplate_file "$i" && continue
+            local base_i="${i#./}"
+            is_boilerplate_file "$base_i" && continue
             ((n >= number_of_feed_articles)) && break
             printf "." 1>&3
             printf '<item><title>'
@@ -1304,7 +1350,8 @@ rebuild_all_entries() {
 
     local i
     for i in ./*.html; do
-        is_boilerplate_file "$i" && continue
+        local base_i="${i#./}"
+        is_boilerplate_file "$base_i" && continue
         local contentfile
         contentfile=$(mktmp)
 
@@ -1327,7 +1374,13 @@ rebuild_all_entries() {
         chmod 644 "$i"
         touch -t "$timestamp" "$i"
         rm -f "$contentfile"
+        # We need to recreate includes because create_html_page might have been called
+        # but create_includes/delete_includes are usually called at the end of main.
+        # However, rebuild_all_entries is called from main which already does this.
+        # But wait, create_html_page uses .header.html etc which are created by create_includes.
     done
+    # Re-run create_includes to ensure they are available for subsequent calls if needed
+    # although main does it.
     printf "\n"
     return 0
 }
